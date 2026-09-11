@@ -1,0 +1,7 @@
+{
+  "name": "quality-engineering-cloudflare-ui",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {"check": "tsc --noEmit", "dev": "wrangler dev", "deploy": "wrangler deploy"},
+  "devDependencies": {"typescript": "^5.9.2", "wrangler": "^4.35.0"}
+}

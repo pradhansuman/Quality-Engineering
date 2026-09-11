@@ -1,0 +1,55 @@
+{
+  "scope": "Approved DemoQA demonstration scope: Text Box output, double-click response, and right-click response only. This does not approve the remainder of DemoQA.",
+  "scope_approved": true,
+  "requirements": [
+    {
+      "id": "REQ-DEMOQA-TEXT-BOX",
+      "title": "Submitting valid Text Box values displays every submitted value",
+      "critical": true,
+      "test_ids": ["text-box-submit"]
+    },
+    {
+      "id": "REQ-DEMOQA-DOUBLE-CLICK",
+      "title": "Double-clicking the demonstration button displays confirmation",
+      "critical": true,
+      "test_ids": ["double-click"]
+    },
+    {
+      "id": "REQ-DEMOQA-RIGHT-CLICK",
+      "title": "Right-clicking the demonstration button displays confirmation",
+      "critical": true,
+      "test_ids": ["right-click"]
+    }
+  ],
+  "tests": [
+    {
+      "id": "text-box-submit",
+      "url": "https://demoqa.com/text-box",
+      "steps": [
+        {"operation": "fill", "selector": "#userName", "value": "QA Workflow Probe"},
+        {"operation": "fill", "selector": "#userEmail", "value": "qa-workflow@example.com"},
+        {"operation": "fill", "selector": "#currentAddress", "value": "Current probe address"},
+        {"operation": "fill", "selector": "#permanentAddress", "value": "Permanent probe address"},
+        {"operation": "click", "selector": "#submit"}
+      ],
+      "assertions": [
+        {"kind": "text_contains", "selector": "#output", "expected": "QA Workflow Probe"},
+        {"kind": "text_contains", "selector": "#output", "expected": "qa-workflow@example.com"},
+        {"kind": "text_contains", "selector": "#output", "expected": "Current probe address"},
+        {"kind": "text_contains", "selector": "#output", "expected": "Permanent probe address"}
+      ]
+    },
+    {
+      "id": "double-click",
+      "url": "https://demoqa.com/buttons",
+      "steps": [{"operation": "double_click", "selector": "#doubleClickBtn"}],
+      "assertions": [{"kind": "text_contains", "selector": "#doubleClickMessage", "expected": "double click"}]
+    },
+    {
+      "id": "right-click",
+      "url": "https://demoqa.com/buttons",
+      "steps": [{"operation": "right_click", "selector": "#rightClickBtn"}],
+      "assertions": [{"kind": "text_contains", "selector": "#rightClickMessage", "expected": "right click"}]
+    }
+  ]
+}
