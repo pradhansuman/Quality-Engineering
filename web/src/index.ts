@@ -12,7 +12,8 @@ const page = `<!doctype html>
 <section class="card"><form id="form"><label for="access">Access key</label><input id="access" type="password" autocomplete="current-password" required>
 <label for="url">Application URL</label><input id="url" name="target_url" type="url" placeholder="https://example.com/" required>
 <label for="requirements">Requirements or product brief</label><input id="requirements" name="requirements" type="file" accept=".txt,.md,.json,.pdf,.doc,.docx"><small>TXT, Markdown, JSON, PDF, DOC, or DOCX. Approved JSON contracts can drive a scoped release gate.</small>
-<div class="options"><label><input name="allow_form_submission" type="checkbox" value="true"> Allow safe form submission</label></div>
+<div class="options"><label><input name="headed" type="checkbox" value="true"> Show browser on runner computer</label><label><input name="allow_form_submission" type="checkbox" value="true"> Allow safe form submission</label></div>
+<small>Headless is the default. Headed mode displays Chromium only when the runner is operating on a computer with a desktop; cloud browser services remain headless.</small>
 <button id="run" type="submit">Start quality assessment</button></form><div id="status" class="status"></div></section></main>
 <script>
 const form=document.querySelector('#form'),statusBox=document.querySelector('#status'),button=document.querySelector('#run'),access=document.querySelector('#access');
