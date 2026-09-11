@@ -21,17 +21,19 @@ python3 -u qa11.py "https://example.com/" --headless --max-pages 10 --max-second
 
 ## Web application architecture
 
-Cloudflare Workers hosts the public interface and proxies `/api/*` to the Python runner. The Python runner needs a container platform because the complete engine uses standard Python Playwright and filesystem-backed evidence. Set the Worker `QA_API_BASE_URL` to that service.
+Cloudflare Workers hosts the public interface. `/api/assess` runs a bounded audit directly with Cloudflare Browser Run, so the public form does not need an access key or a separate server.
 
-## One-command Cloudflare Free deployment
+Free-plan mode performs a bounded headless page audit and returns a downloadable QA report. It deliberately returns `INSUFFICIENT EVIDENCE` unless a directly observed server failure justifies `BLOCK`; it does not claim the full V11 Python scope. Other `/api/*` routes can optionally proxy to the full Python runner when `QA_API_BASE_URL` is configured.
 
-Install Node.js and `cloudflared`, then run:
+## Cloudflare Git deployment
 
-```bash
-./deploy-cloudflare-free.sh
-```
+In Cloudflare Workers & Pages, import this GitHub repository and use:
 
-The script installs isolated dependencies, starts the local QA runner, creates a free Cloudflare Quick Tunnel, configures the encrypted backend API secret, and deploys the Worker. Wrangler opens a browser for Cloudflare login the first time.
+- Root directory: `web`
+- Build command: `npm run check`
+- Deploy command: `npx wrangler deploy`
+
+No access key, secret, or environment variable is required for the built-in Cloudflare assessment.
 
 The web form defaults to headless execution and provides a headed option when the runner is attached to a desktop computer. Cloud-hosted browser sessions do not expose a visible headed window.
 
@@ -44,12 +46,11 @@ docker build -t autonomous-qe .
 docker run --rm -p 8000:8000 -e QA_API_TOKEN=replace-me autonomous-qe
 ```
 
-Deploy the Cloudflare interface:
+Deploy the Cloudflare interface manually if desired:
 
 ```bash
 cd web
 npm install
-npx wrangler secret put QA_API_TOKEN
 npm run deploy
 ```
 
