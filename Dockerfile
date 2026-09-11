@@ -1,6 +1,7 @@
 FROM mcr.microsoft.com/playwright/python:v1.55.0-noble
 WORKDIR /app
 COPY requirements.txt .
+RUN apt-get update && apt-get install -y --no-install-recommends antiword && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir -r requirements.txt
 COPY qa9210.py qa10.py qa11.py ./
 COPY api ./api

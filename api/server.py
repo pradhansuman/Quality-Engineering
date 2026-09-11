@@ -5,6 +5,7 @@ import ipaddress
 import json
 import os
 import socket
+import subprocess
 import sys
 import uuid
 import zipfile
@@ -23,7 +24,7 @@ REPORT_ROOT.mkdir(parents=True, exist_ok=True)
 MAX_UPLOAD_BYTES = int(os.getenv("QA_MAX_UPLOAD_BYTES", "10485760"))
 API_TOKEN = os.getenv("QA_API_TOKEN")
 JOBS: dict[str, dict] = {}
-ALLOWED_SUFFIXES = {".txt", ".md", ".json", ".pdf", ".docx"}
+ALLOWED_SUFFIXES = {".txt", ".md", ".json", ".pdf", ".doc", ".docx"}
 
 app = FastAPI(title="Autonomous Quality Engineering API", version="11.0.0")
 
@@ -70,13 +71,19 @@ def extract_document(path: Path) -> str:
     if path.suffix == ".pdf":
         from pypdf import PdfReader
         return "\n".join(page.extract_text() or "" for page in PdfReader(path).pages)
-    raise ValueError("Supported requirement formats: TXT, Markdown, JSON, PDF, and DOCX")
+    if path.suffix == ".doc":
+        completed = subprocess.run(["antiword", str(path)], capture_output=True, text=True,
+                                   timeout=30, check=False)
+        if completed.returncode:
+            raise ValueError("Unable to extract legacy DOC; convert it to DOCX or PDF")
+        return completed.stdout
+    raise ValueError("Supported requirement formats: TXT, Markdown, JSON, PDF, DOC, and DOCX")
 
 
 async def save_upload(upload: UploadFile, directory: Path) -> Path:
     suffix = Path(upload.filename or "requirements.txt").suffix.lower()
     if suffix not in ALLOWED_SUFFIXES:
-        raise HTTPException(status_code=400, detail="Supported files: TXT, Markdown, JSON, PDF, and DOCX")
+        raise HTTPException(status_code=400, detail="Supported files: TXT, Markdown, JSON, PDF, DOC, and DOCX")
     data = await upload.read(MAX_UPLOAD_BYTES + 1)
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Requirements file is too large")

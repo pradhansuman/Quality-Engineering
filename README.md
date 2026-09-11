@@ -43,9 +43,7 @@ Update `web/wrangler.jsonc` with the HTTPS address of the runner API before depl
 
 ## Requirement documents
 
-The web interface accepts TXT, Markdown, JSON, PDF, and DOCX files. An approved JSON contract containing `scope`, `scope_approved: true`, requirements, tests, and assertions activates requirements-only release gating. Other documents are treated as product briefs: they guide planning but cannot authorize release automatically.
-
-Legacy binary `.doc` files are intentionally rejected; convert them to DOCX or PDF first.
+The web interface accepts TXT, Markdown, JSON, PDF, DOC, and DOCX files. An approved JSON contract containing `scope`, `scope_approved: true`, requirements, tests, and assertions activates requirements-only release gating. Other documents are treated as product briefs: they guide planning but cannot authorize release automatically.
 
 ## Truth boundary
 
