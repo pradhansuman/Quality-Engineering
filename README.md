@@ -23,6 +23,18 @@ python3 -u qa11.py "https://example.com/" --headless --max-pages 10 --max-second
 
 Cloudflare Workers hosts the public interface and proxies `/api/*` to the Python runner. The Python runner needs a container platform because the complete engine uses standard Python Playwright and filesystem-backed evidence. Set the Worker `QA_API_BASE_URL` to that service.
 
+## One-command Cloudflare Free deployment
+
+Install Node.js and `cloudflared`, then run:
+
+```bash
+./deploy-cloudflare-free.sh
+```
+
+The script installs isolated dependencies, starts the local QA runner, creates a free Cloudflare Quick Tunnel, configures encrypted API/UI secrets, deploys the Worker, and prints the access key. Wrangler opens a browser for Cloudflare login the first time.
+
+The Worker remains deployed, but the free Python runner operates through your Mac. Keep the Mac, backend process, and tunnel process running. Re-run the command after a restart because Quick Tunnel URLs are temporary.
+
 Start the runner locally:
 
 ```bash
