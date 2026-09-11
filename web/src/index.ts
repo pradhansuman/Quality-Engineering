@@ -69,7 +69,7 @@ async function nativeAssessment(request: Request, env: Env): Promise<Response> {
         unnamed_inputs: Array.from(document.querySelectorAll("input:not([type=hidden]),textarea,select")).filter(element => visible(element) && !(element as HTMLInputElement).labels?.length && !element.getAttribute("aria-label") && !element.getAttribute("title")).length,
         duplicate_ids: Array.from(new Set(ids.filter((id, index) => ids.indexOf(id) !== index))),
         has_main_landmark: Boolean(document.querySelector("main,[role=main]")),
-        horizontal_overflow_px: Math.max(0, document.documentElement.scrollWidth - innerWidth) };
+        horizontal_overflow_px: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth) };
     });
     const findings = [
       ...(response && response.status() >= 400 ? [`Target returned HTTP ${response.status()}`] : []),
