@@ -31,9 +31,9 @@ Install Node.js and `cloudflared`, then run:
 ./deploy-cloudflare-free.sh
 ```
 
-The script installs isolated dependencies, starts the local QA runner, creates a free Cloudflare Quick Tunnel, configures encrypted API/UI secrets, deploys the Worker, and prints the access key. Wrangler opens a browser for Cloudflare login the first time.
+The script installs isolated dependencies, starts the local QA runner, creates a free Cloudflare Quick Tunnel, configures the encrypted backend API secret, and deploys the Worker. Wrangler opens a browser for Cloudflare login the first time.
 
-The access key prevents anonymous visitors from consuming browser capacity or using the service to test targets without authorization. The web form defaults to headless execution and provides a headed option when the runner is attached to a desktop computer. Cloud-hosted browser sessions do not expose a visible headed window.
+The web form defaults to headless execution and provides a headed option when the runner is attached to a desktop computer. Cloud-hosted browser sessions do not expose a visible headed window.
 
 The Worker remains deployed, but the free Python runner operates through your Mac. Keep the Mac, backend process, and tunnel process running. Re-run the command after a restart because Quick Tunnel URLs are temporary.
 

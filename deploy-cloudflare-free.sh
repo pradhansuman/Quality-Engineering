@@ -14,7 +14,6 @@ if [[ ! -x "$ROOT/.venv/bin/python" ]]; then python3 -m venv "$ROOT/.venv"; fi
 "$ROOT/.venv/bin/python" -m playwright install chromium
 
 API_TOKEN="$(openssl rand -hex 32)"
-UI_ACCESS_KEY="$(openssl rand -hex 12)"
 if [[ -f "$STATE/backend.pid" ]]; then kill "$(cat "$STATE/backend.pid")" 2>/dev/null || true; fi
 if [[ -f "$STATE/tunnel.pid" ]]; then kill "$(cat "$STATE/tunnel.pid")" 2>/dev/null || true; fi
 
@@ -38,17 +37,14 @@ done
 cd "$ROOT/web"
 npm install
 printf '%s' "$API_TOKEN" | npx wrangler secret put QA_API_TOKEN
-printf '%s' "$UI_ACCESS_KEY" | npx wrangler secret put QA_UI_ACCESS_KEY
 npx wrangler deploy --var "QA_API_BASE_URL:$TUNNEL_URL"
 
 cat >"$STATE/deployment.txt" <<EOF
 Backend PID: $(cat "$STATE/backend.pid")
 Tunnel PID: $(cat "$STATE/tunnel.pid")
 Tunnel URL: $TUNNEL_URL
-Access key: $UI_ACCESS_KEY
 EOF
 echo
 echo "Deployment complete."
-echo "Access key: $UI_ACCESS_KEY"
 echo "Keep this Mac powered on and connected to the internet."
 echo "Deployment details: $STATE/deployment.txt"
