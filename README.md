@@ -21,9 +21,15 @@ python3 -u qa11.py "https://example.com/" --headless --max-pages 10 --max-second
 
 ## Web application architecture
 
-Cloudflare Workers hosts the public interface. `/api/assess` runs a bounded audit directly with Cloudflare Browser Run, so the public form does not need an access key or a separate server.
+Cloudflare Workers hosts the public interface. `/api/assess` runs browser exploration and explicit JSON workflow tests directly with Cloudflare Browser Run. The public form does not require an access key or a separate server.
 
-Free-plan mode performs a bounded headless page audit and returns a downloadable QA report. It deliberately returns `INSUFFICIENT EVIDENCE` unless a directly observed server failure justifies `BLOCK`; it does not claim the full V11 Python scope. Other `/api/*` routes can optionally proxy to the full Python runner when `QA_API_BASE_URL` is configured.
+Cloud mode explores safe same-origin links, tabs and disclosures with current-run state/action identities. It reports transitions, skipped controls, remaining frontier, failures, and reconciled coverage. Runs are bounded to 55 seconds of engine execution, 40 operations including replay, 5 exploration pages, 20 exploration states, depth 3 and 6 replays. Browser launch adds time. These are bounded observations, not exhaustive application coverage.
+
+JSON contracts use the format in `requirements.example.json`. Supported steps: `click`, `double_click`, `right_click`, `fill`, `check`, `uncheck`, `select`. Supported assertions: `text_contains`, `text_equals`, `visible`, `value_equals`, `url_equals`, `http_status` (initial navigation response). Each test runs twice with isolated browser storage. Missing/ambiguous locators produce UNKNOWN; a repeated identical assertion mismatch produces BLOCK. RELEASE requires explicit scope approval, confirmed testing permission, complete successful repeated tests and no observed execution problems. It applies only to the stated requirement scope. Workflow interactions require the separate form opt-in.
+
+Download the Markdown report and JSON evidence before leaving the page. Evidence includes states, actions, assertions, repeated execution attempts and up to two failure screenshots; it is not stored on the server. URL-only exploration cannot produce RELEASE. TXT/Markdown briefs are context only and are not automatically converted into verified assertions. Cloud mode does not execute API/backend consistency, mutation, historical regression, security, or performance testing.
+
+When `QA_API_BASE_URL` points to a deployed Python runner, the interface automatically uses `/api/jobs` and polls for its full report. Optional `QA_API_TOKEN` is a server-to-server secret and never appears in the form. Full runner availability and deployment are separate from the native Worker.
 
 ## Cloudflare Git deployment
 
@@ -35,9 +41,9 @@ In Cloudflare Workers & Pages, import this GitHub repository and use:
 
 No access key, secret, or environment variable is required for the built-in Cloudflare assessment.
 
-The web form defaults to headless execution and provides a headed option when the runner is attached to a desktop computer. Cloud-hosted browser sessions do not expose a visible headed window.
+Cloud runs are headless. The headed option appears only when a Python runner is configured; that runner must have a desktop display.
 
-The Worker remains deployed, but the free Python runner operates through your Mac. Keep the Mac, backend process, and tunnel process running. Re-run the command after a restart because Quick Tunnel URLs are temporary.
+Native cloud mode does not depend on a Mac or tunnel. If using the optional local Python runner, keep its computer, backend process and tunnel running.
 
 Start the runner locally:
 
@@ -54,11 +60,11 @@ npm install
 npm run deploy
 ```
 
-Update `web/wrangler.jsonc` with the HTTPS address of the runner API before deployment.
+Set `QA_API_BASE_URL` only when using the optional Python runner. No runner variable is needed for native mode.
 
 ## Requirement documents
 
-The web interface accepts TXT, Markdown, JSON, PDF, DOC, and DOCX files. An approved JSON contract containing `scope`, `scope_approved: true`, requirements, tests, and assertions activates requirements-only release gating. Other documents are treated as product briefs: they guide planning but cannot authorize release automatically.
+Native cloud mode accepts JSON, TXT and Markdown up to 1 MB. The full Python runner also accepts PDF, DOC and DOCX. Unsupported uploads and malformed contracts are rejected explicitly. An approved JSON contract containing `scope`, `scope_approved: true`, requirements, tests, and assertions enables scoped release gating; uploading prose alone does not authorize release.
 
 ## Truth boundary
 

@@ -1,115 +1,101 @@
-import { launch, type BrowserWorker } from "@cloudflare/playwright";
+import { launch, type BrowserWorker } from '@cloudflare/playwright';
+import { assess, parseContract, publicTarget, type Contract } from './engine';
 
-interface Env {
-  BROWSER: BrowserWorker;
-  QA_API_BASE_URL?: string;
-}
+interface Env { BROWSER: BrowserWorker; QA_API_BASE_URL?: string; QA_API_TOKEN?: string }
 
 const page = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Autonomous Quality Engineering</title><style>
-:root{font-family:Inter,ui-sans-serif,system-ui;background:#07111f;color:#e8f0ff}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 10% 0,#17335c 0,transparent 35%),#07111f}.shell{max-width:920px;margin:auto;padding:64px 24px}.eyebrow{color:#69e6c1;font-weight:800;letter-spacing:.14em;text-transform:uppercase}h1{font-size:clamp(2.5rem,7vw,5rem);line-height:.95;margin:.35em 0}p{color:#aabbd5;line-height:1.7}.card{margin-top:36px;padding:28px;border:1px solid #294464;border-radius:22px;background:#0b192bbf;box-shadow:0 30px 90px #0008}label{display:block;font-weight:750;margin:18px 0 8px}input[type=url],input[type=file]{width:100%;padding:14px;border-radius:12px;border:1px solid #35516f;background:#071321;color:#fff}button{margin-top:24px;padding:14px 22px;border:0;border-radius:12px;background:#69e6c1;color:#05140f;font-weight:850;cursor:pointer}button:disabled{opacity:.5}.options{display:flex;gap:24px;flex-wrap:wrap;margin-top:18px}.options label{margin:0;font-weight:600}.status{display:none;margin-top:24px;padding:18px;border-radius:14px;background:#071321;white-space:pre-wrap}.decision{font-size:1.5rem;font-weight:900}.RELEASE{color:#69e6c1}.BLOCK{color:#ff718b}.INSUFFICIENT{color:#ffd166}small{color:#7890ad}</style></head>
-<body><main class="shell"><div class="eyebrow">V11 Quality Organization</div><h1>Test what matters.<br>Prove what happened.</h1><p>Enter a public application URL. Optionally attach approved requirements or a product brief. The system preserves unknowns and returns RELEASE, BLOCK, or INSUFFICIENT EVIDENCE.</p>
-<section class="card"><form id="form"><label for="url">Application URL</label><input id="url" name="target_url" type="url" placeholder="https://example.com/" required>
-<label for="requirements">Requirements or product brief</label><input id="requirements" name="requirements" type="file" accept=".txt,.md,.json,.pdf,.doc,.docx"><small>TXT, Markdown, JSON, PDF, DOC, or DOCX. Approved JSON contracts can drive a scoped release gate.</small>
-<div class="options"><label><input name="headed" type="checkbox" value="true"> Show browser on runner computer</label><label><input name="allow_form_submission" type="checkbox" value="true"> Allow safe form submission</label></div>
-<small>Headless is the default. Headed mode displays Chromium only when the runner is operating on a computer with a desktop; cloud browser services remain headless.</small>
-<button id="run" type="submit">Start quality assessment</button></form><div id="status" class="status"></div></section></main>
+<title>Quality Engineering</title><style>
+*{box-sizing:border-box}body{font-family:system-ui;margin:0;background:#07111f;color:#e8f0ff}main{max-width:920px;margin:auto;padding:48px 24px}h1{font-size:3rem}p,small{color:#aabbd5;line-height:1.6}form,#status{background:#112039;border:1px solid #294464;border-radius:16px;padding:24px;margin:24px 0}label{display:block;margin:16px 0}input[type=url],input[type=file]{width:100%;padding:12px;background:#07111f;color:white;border:1px solid #567;border-radius:8px}button{padding:12px 18px;margin:10px 10px 0 0;background:#69e6c1;border:0;border-radius:8px;font-weight:700;cursor:pointer}button:disabled{opacity:.5}pre{white-space:pre-wrap;overflow-wrap:anywhere}#decision{font-size:1.7rem;font-weight:800;color:#ffd166}li{margin:8px 0}
+</style></head><body><main><h1>Test. Explore. Show the evidence.</h1>
+<p id="mode">Cloud assessment explores safe links, tabs and disclosures. Upload a JSON test contract to check explicit workflows. Every result reports tested scope and remaining unknowns.</p>
+<form id="form"><label for="url">Application URL</label><input id="url" name="target_url" type="url" required placeholder="https://example.com/">
+<label for="requirements">Requirements (optional)</label><input id="requirements" name="requirements" type="file" accept=".json,.txt,.md">
+<small id="formats">JSON contracts execute supported tests. TXT and Markdown are context only, not verified requirements. <a href="/api/example-contract" style="color:#69e6c1">Download a DemoQA contract</a>.</small>
+<label><input type="checkbox" name="authorized" value="true"> I have permission to test this application</label>
+<label><input type="checkbox" name="allow_form_submission" value="true"> Allow the uploaded contract's workflow interactions and same-origin writes</label>
+<label id="headed-option" hidden><input type="checkbox" name="headed" value="true"> Show browser on the runner computer</label>
+<small>Cloud runs are headless and bounded to about one minute, 40 operations and 5 exploration pages. A release decision applies only to an approved, verified requirement scope.</small>
+<button id="run">Start assessment</button></form><section id="status" hidden aria-live="polite"></section></main>
 <script>
 const form=document.querySelector('#form'),statusBox=document.querySelector('#status'),button=document.querySelector('#run');
-const show=t=>{statusBox.style.display='block';statusBox.replaceChildren(document.createTextNode(t))};
-function downloadReport(report){const blob=new Blob([report.markdown],{type:'text/markdown'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='qa-report-'+report.run_id+'.md';a.click();URL.revokeObjectURL(url)}
-function showReport(report){statusBox.style.display='block';const decision=document.createElement('div'),summary=document.createElement('p'),metrics=document.createElement('pre'),download=document.createElement('button');decision.className='decision '+(report.decision==='INSUFFICIENT EVIDENCE'?'INSUFFICIENT':report.decision);decision.textContent=report.decision;summary.textContent=report.summary;metrics.textContent=JSON.stringify(report.metrics,null,2);download.type='button';download.textContent='Download QA report';download.onclick=()=>downloadReport(report);statusBox.replaceChildren(decision,summary,metrics,download)}
-form.addEventListener('submit',async e=>{e.preventDefault();button.disabled=true;show('Cloudflare browser assessment is running…');try{const body=new FormData(form);if(!body.get('requirements')?.size)body.delete('requirements');const response=await fetch('/api/assess',{method:'POST',body});const report=await response.json();if(!response.ok)throw new Error(report.detail||'Assessment failed');showReport(report)}catch(error){show(error instanceof Error?error.message:'Assessment failed')}finally{button.disabled=false}});
+let mode='cloud';
+function show(text){statusBox.hidden=false;statusBox.textContent=text}
+function download(data,type,name){const url=URL.createObjectURL(new Blob([data],{type})),link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+function reportView(report){statusBox.replaceChildren();const heading=document.createElement('div');heading.id='decision';heading.textContent=report.decision;statusBox.append(heading);
+for(const text of [report.summary,'Decision scope: '+report.scope]){const paragraph=document.createElement('p');paragraph.textContent=text;statusBox.append(paragraph)}
+const details=document.createElement('pre');details.textContent=JSON.stringify(report.metrics,null,2);statusBox.append(details);
+const list=document.createElement('ul');for(const item of [...report.problems.map(problem=>problem.category+': '+problem.message),...report.unknowns.map(item=>'UNKNOWN: '+item)]){const row=document.createElement('li');row.textContent=item;list.append(row)}statusBox.append(list);
+for(const [label,type,name,data] of [['Download QA report','text/markdown','qa-report.md',report.markdown],['Download evidence','application/json','qa-evidence.json',JSON.stringify(report,null,2)]]){const control=document.createElement('button');control.type='button';control.textContent=label;control.onclick=()=>download(data,type,name);statusBox.append(control)}}
+async function read(response){const text=await response.text();let result;try{result=JSON.parse(text)}catch{throw new Error('Service returned HTTP '+response.status+'. Try again or check the service limits.')}if(!response.ok)throw new Error(result.detail||'Service error '+response.status);return result}
+const ready=fetch('/api/health').then(read).then(health=>{if(health.mode==='python-runner'){mode='runner';document.querySelector('#requirements').accept='.json,.txt,.md,.pdf,.doc,.docx';document.querySelector('#formats').textContent='Full runner supports JSON, TXT, Markdown, PDF, DOC and DOCX.';document.querySelector('#headed-option').hidden=false;document.querySelector('#mode').textContent='Full Python QA engine: browser exploration, supplied workflows and detailed QA report.'}}).catch(()=>{});
+form.addEventListener('submit',async event=>{event.preventDefault();button.disabled=true;show('Starting browser assessment…');const started=Date.now();let timer;try{await ready;timer=setInterval(()=>show('Assessment running: '+Math.floor((Date.now()-started)/1000)+' seconds. Gathering evidence…'),1000);const body=new FormData(form);if(!body.get('requirements')?.size)body.delete('requirements');
+if(mode==='runner'){const job=await read(await fetch('/api/jobs',{method:'POST',body}));clearInterval(timer);for(let poll=0;poll<180;poll++){const state=await read(await fetch('/api/jobs/'+job.job_id));show(state.status+'\\n'+(state.recent_log||''));if(state.status==='FAILED')throw new Error(state.error||'Runner failed');if(state.status==='COMPLETE'){show((state.decision||'INSUFFICIENT EVIDENCE')+'\\n'+(state.summary||''));const link=document.createElement('a');link.href='/api/jobs/'+job.job_id+'/report';link.textContent='Download QA report';statusBox.append(link);return}await new Promise(resolve=>setTimeout(resolve,2000))}throw new Error('Polling stopped after six minutes. Job ID: '+job.job_id)}
+const report=await read(await fetch('/api/assess',{method:'POST',body}));clearInterval(timer);reportView(report)
+}catch(error){show(error.message||'Assessment failed')}finally{clearInterval(timer);button.disabled=false}});
 </script></body></html>`;
 
-function publicTarget(value: string): URL {
-  if (value.includes("[") || value.includes("](")) throw new Error("Use a plain URL, not Markdown syntax");
-  const target = new URL(value);
-  if (!["http:", "https:"].includes(target.protocol) || target.username || target.password) throw new Error("A public HTTP or HTTPS URL is required");
-  const host = target.hostname.toLowerCase();
-  if (host === "localhost" || host.endsWith(".local") || /^(127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(host)) throw new Error("Private and local targets are blocked");
-  return target;
-}
-
-function escapeMarkdown(value: unknown): string {
-  return String(value ?? "").replace(/[\r\n]+/g, " ").replace(/\|/g, "\\|");
-}
-
 async function nativeAssessment(request: Request, env: Env): Promise<Response> {
-  const form = await request.formData();
-  let target: URL;
-  try { target = publicTarget(String(form.get("target_url") || "")); }
-  catch (error) { return Response.json({ detail: error instanceof Error ? error.message : "Invalid URL" }, { status: 400 }); }
-  const upload = form.get("requirements");
-  const requirement = upload instanceof File ? { name: upload.name, type: upload.type, bytes: upload.size,
-    text: /\.(txt|md|json)$/i.test(upload.name) && upload.size <= 1_000_000 ? (await upload.text()).slice(0, 100_000) : null } : null;
-  const runId = crypto.randomUUID();
-  const started = Date.now();
   let browser: Awaited<ReturnType<typeof launch>> | undefined;
   try {
-    browser = await launch(env.BROWSER);
-    const page = await browser.newPage();
-    const runtimeErrors: string[] = [];
-    page.on("pageerror", error => runtimeErrors.push(String(error).slice(0, 500)));
-    const response = await page.goto(target.toString(), { waitUntil: "domcontentloaded", timeout: 20_000 });
-    await page.waitForTimeout(800);
-    const observation = await page.evaluate(() => {
-      const visible = (element: Element) => { const box = element.getBoundingClientRect(), style = getComputedStyle(element); return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && style.display !== "none"; };
-      const named = (element: Element) => Boolean((element.getAttribute("aria-label") || element.getAttribute("title") || element.textContent || "").trim());
-      const ids = Array.from(document.querySelectorAll("[id]")).map(element => element.id);
-      return { title: document.title, text_length: (document.body?.innerText || "").trim().length,
-        headings: Array.from(document.querySelectorAll("h1,h2,h3")).filter(visible).slice(0, 30).map(element => (element.textContent || "").trim()),
-        links: Array.from(document.querySelectorAll("a[href]")).filter(visible).length,
-        buttons: Array.from(document.querySelectorAll("button,[role=button]")).filter(visible).length,
-        inputs: Array.from(document.querySelectorAll("input:not([type=hidden]),textarea,select")).filter(visible).length,
-        forms: document.forms.length,
-        images_missing_alt: Array.from(document.images).filter(image => !image.hasAttribute("alt")).length,
-        unnamed_buttons: Array.from(document.querySelectorAll("button,[role=button]")).filter(element => visible(element) && !named(element)).length,
-        unnamed_inputs: Array.from(document.querySelectorAll("input:not([type=hidden]),textarea,select")).filter(element => visible(element) && !(element as HTMLInputElement).labels?.length && !element.getAttribute("aria-label") && !element.getAttribute("title")).length,
-        duplicate_ids: Array.from(new Set(ids.filter((id, index) => ids.indexOf(id) !== index))),
-        has_main_landmark: Boolean(document.querySelector("main,[role=main]")),
-        horizontal_overflow_px: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth) };
-    });
-    const findings = [
-      ...(response && response.status() >= 400 ? [`Target returned HTTP ${response.status()}`] : []),
-      ...runtimeErrors.map(error => `Runtime error: ${error}`),
-      ...(observation.unnamed_buttons ? [`${observation.unnamed_buttons} visible buttons lack accessible names`] : []),
-      ...(observation.unnamed_inputs ? [`${observation.unnamed_inputs} visible inputs lack accessible names`] : []),
-      ...(observation.duplicate_ids.length ? [`Duplicate IDs: ${observation.duplicate_ids.join(", ")}`] : []),
-      ...(observation.horizontal_overflow_px > 5 ? [`Horizontal overflow: ${observation.horizontal_overflow_px}px`] : []),
-    ];
-    const decision = response && response.status() >= 500 ? "BLOCK" : "INSUFFICIENT EVIDENCE";
-    const metrics = { http_status: response?.status() ?? null, duration_ms: Date.now() - started, ...observation,
-      requirement_file: requirement ? { name: requirement.name, type: requirement.type, bytes: requirement.bytes, extracted: requirement.text !== null } : null,
-      execution_mode: "HEADLESS_CLOUDFLARE_BROWSER_RUN", findings: findings.length };
-    const markdown = `# Cloudflare QA Report\n\nDecision: **${decision}**\n\nRun: \`${runId}\`\n\nTarget: ${target}\n\n## Observed scope\n\n- HTTP status: ${metrics.http_status}\n- Title: ${escapeMarkdown(observation.title)}\n- Links: ${observation.links}\n- Buttons: ${observation.buttons}\n- Inputs: ${observation.inputs}\n- Forms: ${observation.forms}\n- Requirement document: ${requirement ? escapeMarkdown(requirement.name) : "not supplied"}\n\n## Findings\n\n${findings.length ? findings.map(item => `- ${escapeMarkdown(item)}`).join("\n") : "- No direct runtime or basic accessibility defect was observed."}\n\n## Truth boundary\n\nThis Cloudflare Free assessment is a bounded headless page audit. Undeclared business rules, multi-step workflows, APIs, authentication, backend data, security, performance under load, and unobserved states remain UNKNOWN.\n`;
-    return Response.json({ run_id: runId, decision, summary: findings.length ? `${findings.length} risk finding(s) require review.` : "The observed page loaded without a directly proven defect; broader behavior remains unknown.", metrics, findings, markdown });
-  } catch (error) {
-    return Response.json({ detail: error instanceof Error ? error.message : "Browser assessment failed" }, { status: 500 });
-  } finally {
-    if (browser) {
-      try { await browser.close(); }
-      catch {}
+    const reader = request.body?.getReader();
+    if (!reader) throw new Error('An assessment form is required');
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      size += chunk.value.byteLength;
+      if (size > 1_100_000) {
+        await reader.cancel();
+        return Response.json({ detail: 'Upload must be smaller than 1 MB' }, { status: 413 });
+      }
+      chunks.push(chunk.value);
     }
-  }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    const form = await new Response(bytes, { headers: { 'content-type': request.headers.get('content-type') || '' } }).formData();
+    const target = publicTarget(String(form.get('target_url') || ''));
+    if (form.get('headed') === 'true') throw new Error('Cloud assessment supports headless mode only');
+    const upload = form.get('requirements');
+    let contract: Contract | null = null, brief: string | null = null;
+    if (upload instanceof File && upload.size) {
+      if (!/\.(json|txt|md)$/i.test(upload.name)) throw new Error('Cloud mode accepts JSON, TXT or Markdown. PDF/DOC files require the full Python runner.');
+      const text = await upload.text();
+      if (/\.json$/i.test(upload.name)) contract = parseContract(JSON.parse(text), target.origin);
+      else brief = text.slice(0, 100_000);
+    }
+    const authorized = form.get('authorized') === 'true';
+    if (form.get('allow_form_submission') === 'true' && !authorized) throw new Error('Confirm testing permission before enabling workflow interactions');
+    browser = await launch(env.BROWSER);
+    return Response.json(await assess(browser, target, contract, authorized, form.get('allow_form_submission') === 'true', brief));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/429|rate limit|quota|time limit exceeded/i.test(message)) return Response.json({ detail: /time limit exceeded|quota/i.test(message) ? 'Cloudflare browser allowance is exhausted. Retry after your allowance resets.' : 'Cloudflare is limiting new browser sessions. Wait one minute and try again.', decision: 'INSUFFICIENT EVIDENCE', category: 'PROVIDER_LIMIT' }, { status: 429, headers: { 'retry-after': '60' } });
+    return Response.json({ detail: message, decision: 'INSUFFICIENT EVIDENCE' }, { status: browser ? 503 : /browser|quota|429|limit exceeded/i.test(message) ? 503 : 400 });
+  } finally { if (browser) await browser.close().catch(() => {}); }
 }
 
 async function proxy(request: Request, env: Env): Promise<Response> {
-  if (!env.QA_API_BASE_URL) return Response.json({ detail: "QA_API_BASE_URL is not configured" }, { status: 503 });
-  const incoming = new URL(request.url);
-  const target = new URL(incoming.pathname + incoming.search, env.QA_API_BASE_URL);
-  const headers = new Headers(request.headers);
-  headers.delete("host");
-  return fetch(target, { method: request.method, headers, body: request.method === "GET" ? undefined : request.body, redirect: "manual" });
+  if (!env.QA_API_BASE_URL) return Response.json({ detail: 'Full Python runner is not configured' }, { status: 503 });
+  const incoming = new URL(request.url), headers = new Headers(request.headers);
+  headers.delete('host');
+  headers.delete('authorization');
+  if (env.QA_API_TOKEN) headers.set('authorization', 'Bearer ' + env.QA_API_TOKEN);
+  return fetch(new URL(incoming.pathname + incoming.search, env.QA_API_BASE_URL), { method: request.method, headers, body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body, redirect: 'manual' });
 }
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    if (url.pathname === "/api/health" && request.method === "GET") return Response.json({ ok: true, mode: "cloudflare-browser-run" });
-    if (url.pathname === "/api/assess" && request.method === "POST") return nativeAssessment(request, env);
-    if (url.pathname.startsWith("/api/")) return proxy(request, env);
-    return new Response(page, { headers: { "content-type": "text/html;charset=UTF-8", "content-security-policy": "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'", "x-content-type-options": "nosniff" } });
+    if (url.pathname === '/api/health') return Response.json({ ok: true, version: 'cloud-workflows-1', mode: env.QA_API_BASE_URL && !env.QA_API_BASE_URL.includes('.example.com') ? 'python-runner' : 'cloudflare-browser-run' });
+    if (url.pathname === '/api/example-contract') return Response.json({ scope: 'DemoQA title and HTTP response only', scope_approved: false, requirements: [{ id: 'REQ-HOME', test_ids: ['home'] }], tests: [{ id: 'home', url: 'https://demoqa.com/', steps: [], assertions: [{ kind: 'http_status', expected: 200 }, { kind: 'visible', selector: 'body', expected: true }] }] }, { headers: { 'content-disposition': 'attachment; filename="requirements.json"' } });
+    if (url.pathname === '/api/assess' && request.method === 'POST') return nativeAssessment(request, env);
+    if (url.pathname.startsWith('/api/')) {
+      try { return await proxy(request, env); }
+      catch { return Response.json({ detail: 'The Python runner is unavailable' }, { status: 503 }); }
+    }
+    return new Response(page, { headers: { 'content-type': 'text/html;charset=UTF-8', 'content-security-policy': "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'", 'x-content-type-options': 'nosniff', 'cache-control': 'no-store' } });
   },
 };
